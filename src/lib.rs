@@ -1109,6 +1109,22 @@ pub(crate) mod test {
     }
 
     #[test]
+    #[cfg(feature = "_test")]
+    fn https_over_connect_proxy() {
+        init_test_log();
+
+        let proxy = Proxy::new("http://my_proxy:1234/connect-proxy").unwrap();
+
+        let agent = Agent::config_builder()
+            .proxy(Some(proxy))
+            .build()
+            .new_agent();
+
+        let mut res = agent.get("https://httpbin.org/get").call().unwrap();
+        res.body_mut().read_to_string().unwrap();
+    }
+
+    #[test]
     fn ensure_reasonable_stack_sizes() {
         macro_rules! ensure {
             ($type:ty, $size:tt) => {

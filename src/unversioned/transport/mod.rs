@@ -228,6 +228,15 @@ impl<'a> ConnectionDetails<'a> {
 
         self.uri.scheme() == Some(&Scheme::HTTPS)
     }
+
+    /// Tell if the proxied destination over CONNECT proxy needs TLS wrapping.
+    pub fn connect_proxy_needs_tls(&self) -> bool {
+        if let Some(p) = self.proxied {
+            p.scheme() == Some(&Scheme::HTTPS)
+        } else {
+            false
+        }
+    }
 }
 
 /// Transport of HTTP/1.1 as created by a [`Connector`].
@@ -282,6 +291,13 @@ pub trait Transport: Debug + Send + Sync + 'static {
     ///
     /// Defaults to `false`, override in TLS transports.
     fn is_tls(&self) -> bool {
+        false
+    }
+
+    /// Whether the transport is passed through CONNECT proxy.
+    ///
+    /// Defaults to `false`, override in CONNECT proxy transports.
+    fn is_connect_proxy(&self) -> bool {
         false
     }
 
@@ -368,6 +384,12 @@ impl Default for DefaultConnector {
         // If this is a CONNECT proxy, we must "prepare" the socket
         // by sending the `CONNECT host:port` line.
         let inner = inner.chain(ConnectProxyConnector::default());
+
+        #[cfg(feature = "_rustls")]
+        let inner = inner.chain(RustlsConnector::default());
+
+        #[cfg(feature = "native-tls")]
+        let inner = inner.chain(NativeTlsConnector::default());
 
         DefaultConnector {
             inner: boxed_connector(inner),

@@ -11,6 +11,7 @@ use http::{StatusCode, Uri};
 
 use crate::config::DEFAULT_USER_AGENT;
 use crate::http;
+use crate::transport::{Buffers, Either, NextTimeout};
 use crate::transport::{ConnectionDetails, Connector, Transport, TransportAdapter};
 use crate::util::{AuthorityExt, DebugUri, SchemeExt, UriExt};
 use crate::Error;
@@ -227,7 +228,7 @@ fn insert_default_scheme(uri: Uri) -> Uri {
 pub struct ConnectProxyConnector(());
 
 impl<In: Transport> Connector<In> for ConnectProxyConnector {
-    type Out = In;
+    type Out = Either<In, ConnectProxyTransport>;
 
     fn connect(
         &self,
@@ -238,9 +239,9 @@ impl<In: Transport> Connector<In> for ConnectProxyConnector {
             return Ok(None);
         };
 
-        let is_connect_proxy = details.config.connect_proxy_uri().is_some();
-        if !is_connect_proxy {
-            return Ok(Some(transport));
+        let needs_connect_proxy = details.config.connect_proxy_uri().is_some();
+        if !needs_connect_proxy {
+            return Ok(Some(Either::A(transport)));
         }
 
         // unwrap is ok because connect_proxy_uri() above checks it.
@@ -304,7 +305,41 @@ impl<In: Transport> Connector<In> for ConnectProxyConnector {
             }
         }
 
-        Ok(Some(transport))
+        let transport = ConnectProxyTransport {
+            inner: transport.boxed(),
+        };
+
+        Ok(Some(Either::B(transport)))
+    }
+}
+
+pub struct ConnectProxyTransport {
+    inner: Box<dyn Transport>
+}
+
+impl Transport for ConnectProxyTransport {
+    fn buffers(&mut self) -> &mut dyn Buffers {
+        self.inner.buffers()
+    }
+
+    fn transmit_output(&mut self, amount: usize, timeout: NextTimeout) -> Result<(), Error> {
+        self.inner.transmit_output(amount, timeout)
+    }
+
+    fn await_input(&mut self, timeout: NextTimeout) -> Result<bool, Error> {
+        self.inner.await_input(timeout)
+    }
+
+    fn is_open(&mut self) -> bool {
+        self.inner.is_open()
+    }
+
+    fn is_tls(&self) -> bool {
+        false
+    }
+
+    fn is_connect_proxy(&self) -> bool {
+        true
     }
 }
 
@@ -349,6 +384,14 @@ impl fmt::Display for Proto {
 impl fmt::Debug for ConnectProxyConnector {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ProxyConnector").finish()
+    }
+}
+
+impl fmt::Debug for ConnectProxyTransport {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ConnectProxyTransport")
+            .field("chained", &self.inner)
+            .finish()
     }
 }
 

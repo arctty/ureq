@@ -606,7 +606,7 @@ impl BodyHandler {
         let (Some(flow), Some(connection), timings) =
             (&mut self.flow, &mut self.connection, &mut self.timings)
         else {
-            return Ok(0);
+            return Ok(0); 
         };
 
         loop {
