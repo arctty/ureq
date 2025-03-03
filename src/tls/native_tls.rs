@@ -37,9 +37,17 @@ impl<In: Transport> Connector<In> for NativeTlsConnector {
             panic!("NativeTlsConnector requires a chained transport");
         };
 
+        let needs_tls = if transport.is_connect_proxy() {
+            // We are behind a CONNECT proxy and the proxied destination needs TLS
+            trace!("Behind CONNECT proxy");
+            details.connect_proxy_needs_tls()
+        } else {
+            details.needs_tls()
+        };
+
         // Only add TLS if we are connecting via HTTPS and the transport isn't TLS
         // already, otherwise use chained transport as is.
-        if !details.needs_tls() || transport.is_tls() {
+        if !needs_tls || transport.is_tls() {
             trace!("Skip");
             return Ok(Some(Either::A(transport)));
         }
@@ -53,8 +61,13 @@ impl<In: Transport> Connector<In> for NativeTlsConnector {
 
         let connector = self.get_cached_native_tls_connector(details)?;
 
-        let domain = details
-            .uri
+        let uri = if transport.is_connect_proxy() {
+            details.proxied.unwrap()
+        } else {
+            details.uri
+        };
+
+        let domain = uri
             .authority()
             .expect("uri authority for tls")
             .host()

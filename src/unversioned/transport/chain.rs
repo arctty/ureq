@@ -105,6 +105,13 @@ impl<A: Transport, B: Transport> Transport for Either<A, B> {
             Either::B(b) => b.is_tls(),
         }
     }
+
+    fn is_connect_proxy(&self) -> bool {
+        match self {
+            Either::A(a) => a.is_connect_proxy(),
+            Either::B(a) => a.is_connect_proxy(),
+        }
+    }
 }
 
 // Connector is implemented for () to start a chain of connectors.
